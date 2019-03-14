@@ -1,2 +1,3 @@
-# CS284A_CG_Project3-1
-UC Berkeley Computer Graphics Project 3-1
+# Assignment 3-1: Raytracer
+
+https://cs184.eecs.berkeley.edu/sp19/article/18/
