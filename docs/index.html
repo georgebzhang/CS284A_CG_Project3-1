@@ -1,0 +1,274 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<script src='https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=default'></script>
+<style>
+  body {
+    padding: 100px;
+    width: 1000px;
+    margin: auto;
+    text-align: left;
+    font-weight: 300;
+    font-family: 'Open Sans', sans-serif;
+    color: #121212;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Source Sans Pro', sans-serif;
+  }
+</style>
+<title>CS 184 Pathtracer</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+<body>
+
+<h1 align="middle">CS 184: Computer Graphics and Imaging, Spring 2019</h1>
+<h1 align="middle">Project 3-1: Pathtracer</h1>
+<h2 align="middle">George Zhang, CS184-georgebzhang</h2>
+
+<br><br>
+
+<div>
+
+<h2 align="middle">Overview</h2>
+<p>In this project, I  explored how ray tracing can be implemented, from generating rays to checking intersections to creating bonding volume hierarchy (BVH) data structures to direct and indirect illumination from multiple ray bounces to adaptive sampling methods to check if samples have converged early to speed up render times.</p>
+
+<h2 align="middle">Part 1: Ray Generation and Scene Intersection</h2>
+
+<p>I used the Moller Trumbore algorithm using Cramer's rule, as described in http://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-rendering-a-triangle/moller-trumbore-ray-triangle-intersection. This involves setting the ray path expression equal to the plane expression. We must make sure that the Barycentric coordinates w, u, v sum to one. If t_min &lt; t &lt; t_max, then t is valid.</p>
+
+<p>I used the settings "-t 8 -s 64 -l 16 -m 6 -r 480 360 -f" on hive25 machine.</p>
+
+<div align="middle">
+	<table style="width=100%">
+		<tr>
+			<td>
+				<img src="images/p1a.png" align="middle" width="400px"/>
+				<figcaption align="middle">Spheres (4 sec).</figcaption>
+			</td>
+			<td>
+				<img src="images/p1b.png" align="middle" width="400px"/>
+				<figcaption align="middle">Spheres (rotated).</figcaption>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				<img src="images/p1c.png" align="middle" width="400px"/>
+				<figcaption align="middle">Gems (30 sec).</figcaption>
+			</td>
+			<td>
+				<img src="images/p1d.png" align="middle" width="400px"/>
+				<figcaption align="middle">Gems (rotated).</figcaption>
+			</td>
+		</tr>
+	</table>
+</div>
+
+<h2 align="middle">Part 2: Bounding Volume Hierarchy</h2>
+
+<p>I found the average centroid of all primitives. All primitives with centroids greater than average were stored in one child. The rest were stored in the other child. This process was repeated until each child had less than max_leaf_size primitives. I actually progammed this iteratively (using a stack), though recursively may have been much more understandable. Nonetheless, it seems to work, and can potentially avoid stack overflow. Indeed, this tree approach yielded much faster render times. For instance, the cow scene rendered 116 times faster with BVH!</p>
+
+<p>I used the settings "-t 8 -s 64 -l 16 -m 6 -r 480 360 -f" on hive25 machine.</p>
+
+<div align="middle">
+	<table style="width=100%">
+		<tr>
+			<td>
+				<img src="images/p2a.png" align="middle" width="400px"/>
+				<figcaption align="middle">Cow (2088 sec).</figcaption>
+			</td>
+			<td>
+				<img src="images/p2b.png" align="middle" width="400px"/>
+				<figcaption align="middle">Cow (18 sec).</figcaption>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				<img src="images/p2c.png" align="middle" width="400px"/>
+				<figcaption align="middle">Lucy (21 sec).</figcaption>
+			</td>
+			<td>
+				<img src="images/p2d.png" align="middle" width="400px"/>
+				<figcaption align="middle">Max Planck (22 sec).</figcaption>
+			</td>
+		</tr>
+	</table>
+</div>
+
+<h2 align="middle">Part 3: Direct Illumination</h2>
+
+<p>Hemisphere sampling: Sample wi around a hemisphere enclosing the hit point hit_p. Convert wi to world space wi_world. The PDF is constant at 1/(2*pi). Create a ray with origin hit_p + EPS_D * wi_world and direction wi_world. Find intersection of that ray using BVH. If an intersection is found, get the emission multiplied by BSDF and wi.z (cosine between wi and normal (0,0,1)) and (1/PDF). Increment the total spectrum by this amount, and divide by num_samples when finished with the loop.</p>
+
+<p>Ligt sampling: For a given hit point hit_p, loop through each scene light. Create variables for the PDF, wi, and distToLight. These values will get automatically computed when sampling around the light. Convert wi to object space w_in. If w_in is less than 0, then sampled light point lies behind surface, so disregard it. Create a ray with origin hit_p + EPS_D * wi and direction wi. Set the max_t of the ray to distToLight. Find intersection of that ray using BVH. If there is no intersection, then no surface is blocking the light contribution, thus we increment the total spectrum by the emission multiplied by the BSDF, w_in.z, and 1/PDF.</p>
+
+<div align="middle">
+	<table style="width=100%">
+		<tr>
+			<td>
+				<img src="images/p3a.png" align="middle" width="400px"/>
+				<figcaption align="middle">Hemisphere sampling: Bunny (29 sec).</figcaption>
+			</td>
+			<td>
+				<img src="images/p3b.png" align="middle" width="400px"/>
+				<figcaption align="middle">Hemisphere sampling: Bunny (377 sec).</figcaption>
+			</td>
+		</tr>
+	</table>
+</div>
+
+<p>For the left image, I used "./pathtracer -t 8 -s 16 -l 8 -m 6 -H -f CBbunny_16_8.png -r 480 480 ../dae/sky/CBbunny.dae". For the right image, I used "./pathtracer -t 8 -s 64 -l 32 -m 6 -H -f CBbunny_64_32.png -r 480 360 ../dae/sky/CBbunny.dae"</p>
+
+<div align="middle">
+	<table style="width=100%">
+		<tr>
+			<td>
+				<img src="images/p3c.png" align="middle" width="400px"/>
+				<figcaption align="middle">Light sampling: Bunny, 1 light rays (0.3 sec).</figcaption>
+			</td>
+			<td>
+				<img src="images/p3d.png" align="middle" width="400px"/>
+				<figcaption align="middle">Light sampling: Bunny, 4 light rays (0.7 sec).</figcaption>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				<img src="images/p3e.png" align="middle" width="400px"/>
+				<figcaption align="middle">Light sampling: Bunny, 16 light rays (3 sec).</figcaption>
+			</td>
+			<td>
+				<img src="images/p3f.png" align="middle" width="400px"/>
+				<figcaption align="middle">Light sampling: Bunny, 64 light rays (10 sec).</figcaption>
+			</td>
+		</tr>
+	</table>
+</div>
+
+<p>In hemisphere sampling, we sample around the hemisphere enclosing the hit point. in light sampling, we sample around the light within the solid angle to the hig point. The latter yields less noise. This can be seen through hemisphere sampling (in Lecture 12, Slide 35), where sampling around the hemisphere enclosing the hit point yields a lot of noise, especially when using few sample points. In Lecture 12, Slide 41, we see that light sampling does not suffer as much from using fewer sample points.</p>
+
+<h2 align="middle">Part 4: Global Illumination</h2>
+
+<p>Direct lighting includes zero_bounce_radiance and one_bounce_radiance. However, the at_least_one_bounce_radiance function computes the first one bounce and subsequent indirect lighting bounces. That first bounce is direct lighting, thus indirect lighting is the result from at_least_one_bounce_radiance minus one_bounce_radiance. one_bounce_radiance is simply the direct lighting (hemisphere sampling or importance (light) sampling) functions developed in Part 3. at_leasT_one_bounce_radiance is called only if max_ray_depth (set by -m flag) is greater than 1. In at_least_one_bounce_radiance, we call one_bounce at least once. We decrement the depth of the ray from max_ray_depth to max_ray_depth - 1. Then, as long as the ray's depth is greater than 1 or if a Russian Roulette probability terminates the function, we return L_out.</p>
+
+<div align="middle">
+	<table style="width=100%">
+		<tr>
+			<td>
+				<img src="images/p4a.png" align="middle" width="400px"/>
+				<figcaption align="middle">Indirect Illumination: Spheres.</figcaption>
+			</td>
+			<td>
+				<img src="images/p4b.png" align="middle" width="400px"/>
+				<figcaption align="middle">Direct Illumination: Spheres.</figcaption>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				<img src="images/p4c.png" align="middle" width="400px"/>
+				<figcaption align="middle">Global Illumination: Spheres.</figcaption>
+			</td>
+		</tr>
+	</table>
+</div>
+
+<p>The command "./pathtracer -t 8 -s 64 -l 16 -m 5 -r 480 360 -f spheres.png ../dae/sky/CBspheres_lambertian.dae" was used.</p>
+
+<div align="middle">
+	<table style="width=100%">
+		<tr>
+			<td>
+				<img src="images/p4d.png" align="middle" width="400px"/>
+				<figcaption align="middle">m = 0.</figcaption>
+			</td>
+			<td>
+				<img src="images/p4e.png" align="middle" width="400px"/>
+				<figcaption align="middle">m = 1.</figcaption>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				<img src="images/p4f.png" align="middle" width="400px"/>
+				<figcaption align="middle">m = 2.</figcaption>
+			</td>
+			<td>
+				<img src="images/p4g.png" align="middle" width="400px"/>
+				<figcaption align="middle">m = 3.</figcaption>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				<img src="images/p4h.png" align="middle" width="400px"/>
+				<figcaption align="middle">m = 100.</figcaption>
+			</td>
+		</tr>
+	</table>
+</div>
+
+<p>I used the command: "./pathtracer -t 8 -s 1024 -l 16 -m X -r 480 360 -f bunnymX.png ../dae/sky/CBbunny.dae" where X is the max ray depth.</p>
+
+<div align="middle">
+	<table style="width=100%">
+		<tr>
+			<td>
+				<img src="images/p4i.png" align="middle" width="400px"/>
+				<figcaption align="middle">s = 1.</figcaption>
+			</td>
+			<td>
+				<img src="images/p4j.png" align="middle" width="400px"/>
+				<figcaption align="middle">s = 2.</figcaption>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				<img src="images/p4k.png" align="middle" width="400px"/>
+				<figcaption align="middle">s = 4.</figcaption>
+			</td>
+			<td>
+				<img src="images/p4l.png" align="middle" width="400px"/>
+				<figcaption align="middle">s = 8.</figcaption>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				<img src="images/p4m.png" align="middle" width="400px"/>
+				<figcaption align="middle">s = 16.</figcaption>
+			</td>
+			<td>
+				<img src="images/p4n.png" align="middle" width="400px"/>
+				<figcaption align="middle">s = 64.</figcaption>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				<img src="images/p4o.png" align="middle" width="400px"/>
+				<figcaption align="middle">s = 1024.</figcaption>
+			</td>
+		</tr>
+	</table>
+</div>
+
+<p>I used the command: "./pathtracer -t 8 -s X -l 4 -m 5 -r 480 360 -f spheressX.png ../dae/sky/CBspheres_lambertian.dae" where X is the samples-per-pixel rates.</p>
+
+<h2 align="middle">Part 5: Adaptive Sampling</h2>
+
+<p>To check convergence every samplesPerBatch samples, I simply used a modulo check: n % samplesPerPatch == 0. If the convergence condition (I less than or equal to maxTolerance * mu), then the loop is broken, and n_converge (which may be less than num_samples) is stored into sampleCountBuffer.</p>
+
+<div align="middle">
+	<table style="width=100%">
+		<tr>
+			<td>
+				<img src="images/p5a.png" align="middle" width="400px"/>
+				<figcaption align="middle">Bunny (sample).</figcaption>
+			</td>
+			<td>
+				<img src="images/p5b.png" align="middle" width="400px"/>
+				<figcaption align="middle">Bunny (rate).</figcaption>
+			</td>
+		</tr>
+	</table>
+</div>
+
+<p>I ran the command "-t 8 -s 2048 -a 64 0.05 -l 1 -m 5 -r 480 360".</p>
+
+</body>
+</html>
